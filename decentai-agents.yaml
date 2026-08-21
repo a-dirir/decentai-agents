@@ -13,24 +13,16 @@ catalog:
     The agents DecentAI publishes. Install the ones a deployment needs;
     none of them ship with the platform.
 
+# An entry is an id and a path, and nothing else: what an agent is called
+# and what it does are its manifest's to say, so that there is one answer
+# rather than two that can disagree. `id` must equal the `agent.id` in the
+# manifest at `path`.
 agents:
   - id: notebook
-    name: Notebook Agent
     path: notebook
-    summary: >
-      Saves and finds notes, imports and exports notebook files, and
-      demonstrates a synchronization that asks before it reaches out.
 
   - id: file_desk
-    name: File Desk
     path: file_desk
-    summary: >
-      Lists, reads and saves documents in the platform's own file store.
-      Shows file resources and the read and change permission levels.
 
   - id: web_reader
-    name: Web Reader
     path: web_reader
-    summary: >
-      Fetches a public page and returns its text. One external function,
-      declared at the level that stops to ask, plus a declared dependency.
