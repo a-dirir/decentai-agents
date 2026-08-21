@@ -1,10 +1,12 @@
 import csv
 import io
 import json
+import re
 
 from ai_runtime.agents_layer.sdk import ToolBase
 
-COLUMNS = ["title", "notebook", "priority"]
+COLUMNS = ["title", "notebook", "priority", "content"]
+MAX_IMPORT_ROWS = 1000
 
 
 class ArchiveTool(ToolBase):
@@ -15,10 +17,10 @@ class ArchiveTool(ToolBase):
         fmt = call.inputs["format"]
 
         records = await call.resources.list_data("note", {"notebook": notebook})
-        rows = [
-            {column: record["keys"].get(column) for column in COLUMNS}
-            for record in records
-        ]
+        rows = []
+        for record in records:
+            row = {column: record["keys"].get(column) for column in COLUMNS}
+            rows.append(row)
 
         await call.progress(f"Exporting {len(rows)} note(s) as {fmt}")
 
@@ -28,14 +30,26 @@ class ArchiveTool(ToolBase):
             buffer = io.StringIO()
             writer = csv.DictWriter(buffer, fieldnames=COLUMNS)
             writer.writeheader()
-            writer.writerows(rows)
+            writer.writerows([
+                {
+                    **row,
+                    "content": json.dumps(
+                        row.get("content"), ensure_ascii=False
+                    ) if row.get("content") is not None else "",
+                }
+                for row in rows
+            ])
             content = buffer.getvalue()
 
+        safe_notebook = re.sub(r"[^a-z0-9._-]+", "-", notebook).strip("-._")
+        filename = f"{safe_notebook or 'notebook'}-notes.{fmt}"
         document = await call.resources.create_file(
-            "document", f"{notebook}-notes.{fmt}", content
+            "document", filename, content
         )
         return {
-            "file_ref": document["resource_ref"], "note_count": len(rows),
+            "file_ref": document["resource_ref"],
+            "filename": filename,
+            "note_count": len(rows),
         }, "success"
 
     async def import_(self, call):
@@ -51,18 +65,61 @@ class ArchiveTool(ToolBase):
 
         content = str(document.get("content") or "")
         stripped = content.lstrip()
-        if stripped.startswith("["):
-            rows = json.loads(content)
-        else:
-            rows = list(csv.DictReader(io.StringIO(content)))
+        try:
+            if stripped.startswith(("[", "{")):
+                rows = json.loads(content)
+            else:
+                reader = csv.DictReader(io.StringIO(content))
+                rows = list(reader)
+                if "title" not in (reader.fieldnames or []):
+                    return {
+                        "error": "The CSV notebook document needs a title column."
+                    }, "error"
+        except (csv.Error, json.JSONDecodeError) as exc:
+            return {"error": f"The notebook document is invalid: {exc}"}, "error"
+
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            return {"error": "The notebook document must contain a list of notes."}, "error"
+        if len(rows) > MAX_IMPORT_ROWS:
+            return {
+                "error": f"The notebook document contains more than {MAX_IMPORT_ROWS} notes."
+            }, "error"
 
         await call.progress(f"Importing {len(rows)} note(s) into '{notebook}'")
 
-        note_refs = []
+        parsed_notes = []
         for row in rows:
-            record = await call.resources.create_data("note", {
+            fields = {
                 "notebook": notebook,
                 "title": str(row.get("title") or "Untitled"),
-            })
+            }
+            priority = row.get("priority")
+            if priority not in (None, ""):
+                try:
+                    priority = int(priority)
+                except (TypeError, ValueError):
+                    return {"error": f"Invalid priority for '{fields['title']}'."}, "error"
+                if not 1 <= priority <= 5:
+                    return {"error": f"Invalid priority for '{fields['title']}'."}, "error"
+                fields["priority"] = priority
+
+            note_content = row.get("content")
+            if isinstance(note_content, str) and note_content.strip():
+                try:
+                    note_content = json.loads(note_content)
+                except json.JSONDecodeError:
+                    return {"error": f"Invalid content for '{fields['title']}'."}, "error"
+            if note_content not in (None, ""):
+                if not isinstance(note_content, dict):
+                    return {"error": f"Invalid content for '{fields['title']}'."}, "error"
+                fields["content"] = note_content
+
+            parsed_notes.append(fields)
+
+        # Validate the complete document before writing anything. A bad row
+        # must not leave the user with a half-imported notebook.
+        note_refs = []
+        for fields in parsed_notes:
+            record = await call.resources.create_data("note", fields)
             note_refs.append(record["resource_ref"])
         return {"note_refs": note_refs, "imported": len(note_refs)}, "success"

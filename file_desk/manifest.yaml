@@ -12,7 +12,7 @@ schema_version: "1.0"
 agent:
   id: file_desk
   name: File Desk
-  version: "1.0.0"
+  version: "1.0.1"
   description: >
     Lists, reads and saves text documents in this platform's file store.
   tags:

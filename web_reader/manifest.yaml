@@ -11,7 +11,7 @@ schema_version: "1.0"
 agent:
   id: web_reader
   name: Web Reader
-  version: "1.0.0"
+  version: "1.1.0"
   description: >
     Fetches a public web page and returns its readable text.
   tags:
@@ -29,7 +29,7 @@ agent:
 implementation:
   entrypoint: agent:WebReaderAgent
   dependencies:
-    - requests
+    - requests>=2.31,<3
 
 tools:
   - id: web

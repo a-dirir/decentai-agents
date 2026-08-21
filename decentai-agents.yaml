@@ -26,3 +26,6 @@ agents:
 
   - id: web_reader
     path: web_reader
+
+  - id: jira_ops
+    path: jira_ops

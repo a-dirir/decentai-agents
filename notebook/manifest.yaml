@@ -13,7 +13,7 @@ schema_version: "1.0"
 agent:
   id: notebook
   name: Notebook Agent
-  version: "1.1.0"
+  version: "1.2.0"
   description: >
     Saves and finds notes, imports and exports notebook files, and safely
     demonstrates synchronization with an external service.
@@ -60,7 +60,10 @@ resources:
         - {name: title,    label: Title,    type: string, storage: keys,   required: true}
         - {name: notebook, label: Notebook, type: string, storage: keys,   required: true}
         - {name: priority, label: Priority, type: number, storage: keys,   required: false}
-        - {name: content,  label: Content,  type: object, storage: values, required: false}
+        # Notes must be readable by the agent after they are saved so they
+        # can be exported again. `values` are intentionally write-only in
+        # DecentAI, so note content belongs in readable record keys.
+        - {name: content,  label: Content,  type: object, storage: keys, required: false}
 
     - id: settings
       label: Notebook Settings
@@ -190,11 +193,12 @@ tools:
             format:   {type: string, enum: [csv, json]}
         outputs:
           type: object
-          required: [file_ref, note_count]
+          required: [file_ref, filename, note_count]
           properties:
             file_ref:
               type: string
               x-resource: {type: file, id: document}
+            filename: {type: string}
             note_count: {type: integer}
 
       - id: import

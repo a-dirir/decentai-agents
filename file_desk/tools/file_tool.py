@@ -43,6 +43,9 @@ class FileTool(ToolBase):
         filename = str(call.inputs["filename"]).strip()
         text = str(call.inputs["text"])
 
+        if not filename:
+            return {"error": "filename cannot be blank"}, "error"
+
         await call.progress(f"Saving {filename}")
         document = await call.resources.create_file("document", filename, text)
         return {

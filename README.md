@@ -18,6 +18,7 @@ that was read.
 | `notebook` | Saves and finds notes, imports and exports notebook files | Every resource kind: a credential, records, files |
 | `file_desk` | Lists, reads and saves documents in the platform's file store | File resources; read and change levels |
 | `web_reader` | Fetches a public page and returns its text | One external function — the chat asks before it runs |
+| `jira_ops` | Triages Jira work, reads issues, comments, logs time, and performs explicit transitions | Read operations are safe; every Jira write asks first |
 
 ## The shape of a repository
 

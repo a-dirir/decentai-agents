@@ -14,8 +14,8 @@ class NoteTool(ToolBase):
         }
         if call.inputs.get("priority") is not None:
             fields["priority"] = int(call.inputs["priority"])
-        if call.inputs.get("content"):
-            fields["content"] = call.inputs["content"]  # encrypted (values)
+        if "content" in call.inputs:
+            fields["content"] = call.inputs["content"]
 
         await call.progress(f"Saving note in '{notebook}'")
 
