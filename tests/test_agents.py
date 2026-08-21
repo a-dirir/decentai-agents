@@ -156,6 +156,137 @@ def test_jira_ops_reads_queue_and_performs_only_the_requested_transition(
     assert posts[0][2]["json"] == {"transition": {"id": "31"}}
 
 
+def test_coc_email_uses_verified_draft_and_exposes_exact_approval_inputs(
+    agents, monkeypatch
+):
+    calls = []
+
+    def post(_session, url, **kwargs):
+        calls.append((url, kwargs))
+        assert kwargs["verify"] is True
+        if url.endswith("/api-key"):
+            assert kwargs["headers"]["X-API-Key-ID"] == "key-id"
+            assert kwargs["headers"]["X-API-Key-Secret"] == "key-secret"
+            return response(200, {"access_token": "test-token"})
+
+        endpoint = kwargs["json"]["endpoint"]
+        data = kwargs["json"]["data"]
+        if endpoint == "Notification:JiraIncident:GET":
+            return response(200, {"data": [
+                {"issue_key": "OPS-8", "summary": "Pending", "customer_informed": "No"},
+                {"issue_key": "OPS-9", "summary": "Done", "customer_informed": "Yes"},
+            ]})
+        if endpoint == "Notification:JiraIncident:Get_Incident_Details":
+            assert data == {"issue_key": "OPS-8"}
+            return response(200, {"data": {
+                "Incident_Details": {"issue_key": "OPS-8", "summary": "Pending"},
+                "Contacts": {
+                    "Recipients": ["customer@example.com"],
+                    "CC": ["ops@example.com"],
+                },
+            }})
+        if endpoint == "Notification:JiraIncident:Prepare_Incident_Email":
+            return response(200, {"data": {
+                "Subject": "Incident OPS-8",
+                "Body": "We are investigating the incident.",
+                "recommendation": ["Review before sending"],
+            }})
+        if endpoint == "Notification:JiraIncident:Send_Email":
+            assert data == {
+                "issue_key": "OPS-8",
+                "Subject": "Incident OPS-8",
+                "Body": "We are investigating the incident.",
+                "toContacts": ["customer@example.com"],
+                "ccContacts": ["ops@example.com"],
+                "Mode": "test",
+            }
+            return response(200, {"message": "Test email sent"})
+        raise AssertionError(endpoint)
+
+    monkeypatch.setattr(requests.Session, "post", post)
+    provider = InMemoryResourceProvider(secrets={
+        "jira_ops__coc_connection": {
+            "base_url": "https://bg-cochub.example",
+            "key_id": "key-id", "key_secret": "key-secret",
+        }
+    })
+    approvals = []
+
+    async def approve(request):
+        approvals.append(request)
+        return True
+
+    executor = FunctionExecutor(provider=provider, approver=approve)
+
+    async def scenario():
+        pending, status = await executor.invoke(
+            agents["jira_ops"], "jira_ops.coc_incident.list_pending", {}
+        )
+        assert status == "success"
+        assert [item["issue_key"] for item in pending["incidents"]] == ["OPS-8"]
+
+        draft, status = await executor.invoke(
+            agents["jira_ops"], "jira_ops.coc_incident.prepare_email",
+            {"issue_key": "ops-8"},
+        )
+        assert status == "success"
+        assert draft["to_contacts"] == ["customer@example.com"]
+
+        loaded_draft, status = await executor.invoke(
+            agents["jira_ops"], "jira_ops.coc_incident.get_draft",
+            {"issue_key": "OPS-8"},
+        )
+        assert status == "success"
+        assert loaded_draft["draft_ref"] == draft["draft_ref"]
+        assert loaded_draft["sent_mode"] == ""
+
+        send_inputs = {
+            "draft_ref": draft["draft_ref"],
+            "issue_key": draft["issue_key"],
+            "subject": draft["subject"],
+            "body": draft["body"],
+            "to_contacts": draft["to_contacts"],
+            "cc_contacts": draft["cc_contacts"],
+        }
+        mismatched, status = await executor.invoke(
+            agents["jira_ops"], "jira_ops.coc_incident.send_live",
+            {**send_inputs, "subject": "Invented subject"}, chat_level=3,
+        )
+        assert status == "error"
+        assert "does not match stored draft" in mismatched["error"]
+
+        sent, status = await executor.invoke(
+            agents["jira_ops"], "jira_ops.coc_incident.send_test", send_inputs
+        )
+        assert status == "success"
+        assert sent["mode"] == "test"
+
+        repeated, status = await executor.invoke(
+            agents["jira_ops"], "jira_ops.coc_incident.send_test",
+            send_inputs, chat_level=3,
+        )
+        assert status == "error"
+        assert "already sent in test mode" in repeated["error"]
+
+        stored = provider.data["jira_ops__incident_draft"][draft["draft_ref"]]
+        assert stored["keys"]["sent_mode"] == "test"
+
+    run(scenario())
+    assert len(approvals) == 1
+    assert approvals[0]["function"] == "jira_ops.coc_incident.send_test"
+    assert approvals[0]["inputs"]["body"] == "We are investigating the incident."
+    assert approvals[0]["inputs"]["to_contacts"] == ["customer@example.com"]
+    send_calls = [
+        call for call in calls
+        if call[1].get("json", {}).get("endpoint")
+        == "Notification:JiraIncident:Send_Email"
+    ]
+    assert len(send_calls) == 1
+    assert agents["jira_ops"].manifest.function(
+        "jira_ops.coc_incident.send_live"
+    )[1]["permission_level"] == 3
+
+
 def test_web_reader_blocks_private_destinations(monkeypatch):
     from decentai_agents.web_reader.tools.web_tool import WebTool
 

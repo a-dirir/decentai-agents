@@ -67,7 +67,6 @@ class JiraClient:
             field_id for field_id in (
                 self.connection.get("ttr_field_id"),
                 self.connection.get("customer_informed_field_id"),
-                self.connection.get("bg_incident_link_field_id"),
             ) if field_id
         )
         return self.request("GET", "/rest/api/3/search/jql", params={
@@ -216,8 +215,5 @@ def normalize_issue(issue: dict[str, Any], client: JiraClient, details=False) ->
             "customer_informed": display_value(fields.get(
                 client.connection.get("customer_informed_field_id")
             )) if client.connection.get("customer_informed_field_id") else None,
-            "bg_incident_link": display_value(fields.get(
-                client.connection.get("bg_incident_link_field_id")
-            )) if client.connection.get("bg_incident_link_field_id") else None,
         })
     return result
