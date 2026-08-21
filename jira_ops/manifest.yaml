@@ -3,7 +3,7 @@ schema_version: "1.0"
 agent:
   id: jira_ops
   name: Jira Ops
-  version: "1.2.0"
+  version: "1.2.1"
   description: >
     Triages Jira work, reads issue and SLA details, adds internal comments,
     logs time, and performs explicit single-step transitions.
@@ -256,8 +256,10 @@ tools:
             target_status: {type: string, minLength: 1, maxLength: 120}
         outputs:
           type: object
-          required: [issue_key, target_status, transitioned]
+          required: [issue_key, previous_status, target_status, confirmed_status, transitioned]
           properties:
             issue_key: {type: string}
+            previous_status: {type: string}
             target_status: {type: string}
+            confirmed_status: {type: string}
             transitioned: {type: boolean}

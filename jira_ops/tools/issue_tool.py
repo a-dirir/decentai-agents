@@ -64,6 +64,8 @@ class IssueTool(JiraToolBase):
         key = str(call.inputs["issue_key"]).upper()
         target = str(call.inputs["target_status"]).strip()
         try:
+            before = client.issue(key)
+            previous_status = issue_status(before)
             choices = client.transitions(key)
             match = next((value for value in choices if str(
                 (value.get("to") or {}).get("name") or value.get("name") or ""
@@ -75,6 +77,26 @@ class IssueTool(JiraToolBase):
                 }, "error"
             await call.progress(f"Moving {key} to {target}")
             client.transition(key, str(match["id"]))
+            after = client.issue(key)
+            confirmed_status = issue_status(after)
         except JiraError as exc:
             return {"error": str(exc)}, "error"
-        return {"issue_key": key, "target_status": target, "transitioned": True}, "success"
+        if confirmed_status.lower() != target.lower():
+            return {
+                "error": (
+                    f"Jira accepted the transition request for {key}, but "
+                    f"verification found status '{confirmed_status or 'unknown'}' "
+                    f"instead of '{target}'."
+                )
+            }, "error"
+        return {
+            "issue_key": key,
+            "previous_status": previous_status,
+            "target_status": target,
+            "confirmed_status": confirmed_status,
+            "transitioned": True,
+        }, "success"
+
+
+def issue_status(issue):
+    return str(((issue.get("fields") or {}).get("status") or {}).get("name") or "")

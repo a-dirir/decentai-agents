@@ -103,8 +103,10 @@ def test_jira_ops_reads_queue_and_performs_only_the_requested_transition(
     agents, monkeypatch
 ):
     calls = []
+    transitioned = False
 
     def request(_session, method, url, **kwargs):
+        nonlocal transitioned
         calls.append((method, url, kwargs))
         if url.endswith("/search/jql"):
             return response(200, {"issues": [{
@@ -123,7 +125,12 @@ def test_jira_ops_reads_queue_and_performs_only_the_requested_transition(
                 {"id": "41", "name": "Wait", "to": {"name": "Waiting for customer"}},
             ]})
         if url.endswith("/OPS-7/transitions") and method == "POST":
+            transitioned = True
             return response(204)
+        if url.endswith("/OPS-7") and method == "GET":
+            return response(200, {"key": "OPS-7", "fields": {
+                "status": {"name": "Resolved" if transitioned else "In Progress"},
+            }})
         raise AssertionError((method, url))
 
     monkeypatch.setattr(requests.Session, "request", request)
@@ -149,11 +156,50 @@ def test_jira_ops_reads_queue_and_performs_only_the_requested_transition(
         )
         assert status == "success"
         assert moved["transitioned"] is True
+        assert moved["previous_status"] == "In Progress"
+        assert moved["confirmed_status"] == "Resolved"
 
     run(scenario())
     posts = [call for call in calls if call[0] == "POST"]
     assert len(posts) == 1
     assert posts[0][2]["json"] == {"transition": {"id": "31"}}
+
+
+def test_jira_transition_is_not_success_until_the_new_status_is_verified(
+    agents, monkeypatch
+):
+    def request(_session, method, url, **kwargs):
+        if url.endswith("/OPS-7/transitions") and method == "GET":
+            return response(200, {"transitions": [{
+                "id": "31", "name": "Resolve", "to": {"name": "Resolved"},
+            }]})
+        if url.endswith("/OPS-7/transitions") and method == "POST":
+            return response(204)
+        if url.endswith("/OPS-7") and method == "GET":
+            return response(200, {"key": "OPS-7", "fields": {
+                "status": {"name": "In Progress"},
+            }})
+        raise AssertionError((method, url))
+
+    monkeypatch.setattr(requests.Session, "request", request)
+    provider = InMemoryResourceProvider(secrets={
+        "jira_ops__connection": {
+            "base_url": "https://example.atlassian.net",
+            "email": "agent@example.com", "api_token": "token",
+        }
+    })
+    executor = FunctionExecutor(provider=provider)
+
+    async def scenario():
+        result, status = await executor.invoke(
+            agents["jira_ops"], "jira_ops.issue.transition",
+            {"issue_key": "OPS-7", "target_status": "Resolved"},
+            chat_level=3,
+        )
+        assert status == "error"
+        assert "verification found status 'In Progress'" in result["error"]
+
+    run(scenario())
 
 
 def test_web_reader_blocks_private_destinations(monkeypatch):
