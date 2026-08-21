@@ -1,0 +1,36 @@
+# The agents this repository offers.
+#
+# DecentAI reads this file without running any of the code beneath it:
+# every path is resolved inside the checkout, every manifest is validated,
+# and nothing executes until an administrator approves an agent by name.
+
+schema_version: "1.0"
+
+catalog:
+  id: decentai_reference
+  name: DecentAI Agents
+  description: >
+    The agents DecentAI publishes. Install the ones a deployment needs;
+    none of them ship with the platform.
+
+agents:
+  - id: notebook
+    name: Notebook Agent
+    path: notebook
+    summary: >
+      Saves and finds notes, imports and exports notebook files, and
+      demonstrates a synchronization that asks before it reaches out.
+
+  - id: file_desk
+    name: File Desk
+    path: file_desk
+    summary: >
+      Lists, reads and saves documents in the platform's own file store.
+      Shows file resources and the read and change permission levels.
+
+  - id: web_reader
+    name: Web Reader
+    path: web_reader
+    summary: >
+      Fetches a public page and returns its text. One external function,
+      declared at the level that stops to ask, plus a declared dependency.

@@ -1,0 +1,133 @@
+# File Desk — a reference agent for the platform's own file store.
+#
+# Deliberately scoped to the files DecentAI already holds (the ones chats
+# attach and produce) rather than the host filesystem. Approved agent code
+# runs inside the runtime process, so an agent that read arbitrary host
+# paths would read everything the runtime can — its configuration and its
+# signing keys included. The mediated file resource is the honest version
+# of the same idea, and the more useful one.
+
+schema_version: "1.0"
+
+agent:
+  id: file_desk
+  name: File Desk
+  version: "1.0.0"
+  description: >
+    Lists, reads and saves text documents in this platform's file store.
+  tags:
+    - reference
+    - files
+  instructions: >
+    Use these tools for documents held by the platform. Read before you
+    write: saving creates a new document rather than replacing one, so
+    check what already exists before adding another copy. Never invent a
+    file reference — list first and use a reference the list returned.
+  limits:
+    max_steps: 6
+
+implementation:
+  entrypoint: agent:FileDeskAgent
+  dependencies: []
+
+resources:
+  files:
+    - id: document
+      label: Document
+      description: A text document held for this user.
+      binding: {cardinality: many, required: false}
+      constraints:
+        mime_types: [text/plain, text/markdown, text/csv, application/json]
+        max_size_mb: 5
+
+tools:
+  - id: file
+    name: File Tool
+    description: Reads and writes documents in the platform's file store.
+    resources:
+      files: [document]
+    functions:
+      - id: list
+        name: List Documents
+        description: List the documents this user can see, newest first.
+        permission_level: 0
+        timeout_seconds: 15
+        resources:
+          files: {document: list}
+        authorization:
+          action: file.list
+        inputs:
+          type: object
+          additionalProperties: false
+          properties:
+            name_contains: {type: string, maxLength: 120}
+            limit: {type: integer, minimum: 1, maximum: 100, default: 25}
+        outputs:
+          type: object
+          required: [documents, total]
+          properties:
+            documents:
+              type: array
+              items:
+                type: object
+                properties:
+                  file_ref:
+                    type: string
+                    x-resource: {type: file, id: document}
+                  filename: {type: string}
+            total: {type: integer}
+
+      - id: read
+        name: Read Document
+        description: Read one document's text.
+        permission_level: 0
+        timeout_seconds: 15
+        resources:
+          files: {document: read}
+        authorization:
+          action: file.read
+        inputs:
+          type: object
+          additionalProperties: false
+          required: [file_ref]
+          properties:
+            file_ref:
+              type: string
+              x-resource: {type: file, id: document}
+            max_characters: {type: integer, minimum: 100, maximum: 20000, default: 4000}
+        outputs:
+          type: object
+          required: [filename, text, characters, truncated]
+          properties:
+            filename: {type: string}
+            text: {type: string}
+            characters: {type: integer}
+            truncated: {type: boolean}
+
+      - id: save
+        name: Save Document
+        description: >
+          Save text as a new document. Writing is a change, so at standard
+          trust this asks before it runs.
+        permission_level: 1
+        timeout_seconds: 20
+        resources:
+          files: {document: create}
+        authorization:
+          action: file.save
+        inputs:
+          type: object
+          additionalProperties: false
+          required: [filename, text]
+          properties:
+            filename: {type: string, minLength: 1, maxLength: 120}
+            text: {type: string, minLength: 1, maxLength: 200000}
+        outputs:
+          type: object
+          required: [file_ref, filename, characters]
+          properties:
+            file_ref:
+              type: string
+              x-resource: {type: file, id: document}
+            filename: {type: string}
+            characters: {type: integer}

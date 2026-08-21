@@ -1,0 +1,72 @@
+# Web Reader — the other end of the permission model from File Desk.
+#
+# One function, declared at level 3, because reaching a public URL is an
+# action outside this deployment: at ordinary trust the chat stops and
+# asks before it runs. That pause is the platform's central promise, and
+# this agent exists to make it visible in a conversation. It also declares
+# a dependency, so approving it shows the package list an approval covers.
+
+schema_version: "1.0"
+
+agent:
+  id: web_reader
+  name: Web Reader
+  version: "1.0.0"
+  description: >
+    Fetches a public web page and returns its readable text.
+  tags:
+    - reference
+    - web
+  instructions: >
+    Use this only when the user asks for the contents of a specific public
+    page and gives its address. Fetching reaches outside this deployment,
+    so say what you are about to read and why before proposing it. Never
+    guess a URL, and never present fetched text as the platform's own
+    knowledge — quote it as coming from the page.
+  limits:
+    max_steps: 4
+
+implementation:
+  entrypoint: agent:WebReaderAgent
+  dependencies:
+    - requests
+
+tools:
+  - id: web
+    name: Web Tool
+    description: Reads public web pages.
+    functions:
+      - id: fetch
+        name: Fetch Page
+        description: >
+          Fetch one public http(s) URL and return its text. An external
+          action: at standard trust the chat asks before this runs.
+        permission_level: 3
+        timeout_seconds: 30
+        authorization:
+          action: web.fetch
+        inputs:
+          type: object
+          additionalProperties: false
+          required: [url]
+          properties:
+            url:
+              type: string
+              minLength: 8
+              maxLength: 2000
+              pattern: "^https?://"
+            max_characters:
+              type: integer
+              minimum: 200
+              maximum: 20000
+              default: 4000
+        outputs:
+          type: object
+          required: [url, status, title, text, characters, truncated]
+          properties:
+            url: {type: string}
+            status: {type: integer}
+            title: {type: string}
+            text: {type: string}
+            characters: {type: integer}
+            truncated: {type: boolean}
