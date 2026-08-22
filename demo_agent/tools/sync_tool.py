@@ -1,3 +1,5 @@
+"""Secret-resource and level-3 external-action examples (simulated offline)."""
+
 import hashlib
 import json
 

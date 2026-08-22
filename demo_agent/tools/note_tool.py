@@ -1,3 +1,5 @@
+"""Data-resource examples: list, read-through-list, create, and update."""
+
 from ai_runtime.agents_layer.sdk import ToolBase
 
 

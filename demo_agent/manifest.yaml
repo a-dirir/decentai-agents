@@ -1,23 +1,28 @@
-# The Notebook agent — DecentAI's reference agent.
+# Demo Agent — the canonical, copyable DecentAI agent template.
 #
-# Exercises every corner of manifest schema v1: all five data-layer field
-# types, every binding combination, multi-op resource lists,
+# Exercises the schema-v1 patterns an agent author needs: agent metadata,
+# runtime limits, authorization scopes, secrets, data, files, bindings,
+# field storage, constraints, multi-operation resource grants,
 # required/optional/absent scopes, x-resource refs in inputs, outputs and
-# arrays, and all four permission levels. The "remote" behind the sync tool
+# arrays, JSON Schema validation, and all four permission levels.
+# The "remote" behind the sync tool
 # is simulated in code — no external service and no pip dependencies — so
 # installing it demonstrates the whole model without asking a deployment to
 # trust anything outside itself.
 
 schema_version: "1.0"
 
+# Identity shown to administrators and the model-facing behavior contract.
+# Keep `agent.id`, the catalog id, and the agent directory name identical.
 agent:
-  id: notebook
-  name: Notebook Agent
-  version: "1.2.0"
+  id: demo_agent
+  name: Demo Agent
+  version: "1.0.0"
   description: >
     Saves and finds notes, imports and exports notebook files, and safely
     demonstrates synchronization with an external service.
   tags:
+    - demo
     - reference
     - notes
     - productivity
@@ -31,9 +36,14 @@ agent:
     max_steps: 8
 
 implementation:
-  entrypoint: agent:NotebookAgent
+  # `module:ClassName`, relative to this directory. Dependencies use normal
+  # PEP 508 requirement strings; this offline demo intentionally needs none.
+  entrypoint: agent:DemoAgent
   dependencies: []
 
+# Scopes partition authorization decisions. A scope value may be normalized
+# before a grant is checked; each function below decides whether its scope is
+# required and which input supplies the value.
 authorization:
   scopes:
     notebook:
@@ -42,6 +52,9 @@ authorization:
       normalization: lowercase
 
 resources:
+  # Secret values are decrypted only for a function granted `use`. Fields in
+  # `values` are write-only to the model; `keys` may be returned for display or
+  # selection. Never put an API token in `keys`.
   secrets:
     - id: connection
       label: Notebook Sync Connection
@@ -51,6 +64,9 @@ resources:
         - {name: base_url,  label: Service URL, type: string, storage: keys,   required: true}
         - {name: api_token, label: API Token,   type: secret, storage: values, required: true}
 
+  # Data records are mediated by the platform. Cardinality controls how many
+  # records may bind to an installation; required controls whether installation
+  # needs a binding before the agent can run.
   data:
     - id: note
       label: Note
@@ -77,6 +93,7 @@ resources:
           required: false
           options: [updated, created, title]
 
+  # Files are platform-managed objects, never arbitrary host filesystem paths.
   files:
     - id: document
       label: Notebook Document
@@ -86,6 +103,8 @@ resources:
         mime_types: [text/csv, application/json]
         max_size_mb: 5
 
+# Tools group related functions. The optional tool-level resource list is a
+# readable summary; each function still declares its exact operations.
 tools:
   - id: note
     name: Note Tool
@@ -101,6 +120,7 @@ tools:
         timeout_seconds: 10
         resources:
           data: {note: [create, update]}
+        # Required scope: `notebook` must be present in validated inputs.
         authorization:
           action: note.save
           scopes:
@@ -137,6 +157,7 @@ tools:
           data:
             note: [list, read]
             settings: read
+        # Optional scope: a cross-notebook search is allowed when omitted.
         authorization:
           action: note.search
           scopes:
@@ -157,6 +178,7 @@ tools:
               items:
                 type: object
                 properties:
+                  # x-resource makes this an opaque, validated platform reference.
                   note_ref:
                     type: string
                     x-resource: {type: data, id: note}
@@ -175,6 +197,7 @@ tools:
       - id: export
         name: Export Notes
         description: Write one notebook's notes to a stored document.
+        # Level 2 represents a sandboxed/platform-contained change.
         permission_level: 2
         timeout_seconds: 30
         resources:
@@ -247,6 +270,7 @@ tools:
         timeout_seconds: 15
         resources:
           secrets: {connection: use}
+        # An action may have no scopes at all.
         authorization:
           action: sync.status
         inputs:
@@ -263,6 +287,8 @@ tools:
       - id: push
         name: Push Notes
         description: Push one notebook's notes to the remote service.
+        # Level 3 represents an external action and normally pauses for consent.
+        # This demo simulates the remote side so it is safe to run offline.
         permission_level: 3
         timeout_seconds: 60
         resources:

@@ -1,4 +1,4 @@
-"""The Notebook reference agent (see manifest.yaml).
+"""The complete DecentAI demo agent (see manifest.yaml).
 
 Stateless by design: every note, document, and secret flows through the
 mediated ``call.resources`` — the platform's data layer once
@@ -12,6 +12,6 @@ from ai_runtime.agents_layer.sdk import AgentBase
 from .tools import ArchiveTool, NoteTool, SyncTool
 
 
-class NotebookAgent(AgentBase):
+class DemoAgent(AgentBase):
     def tools(self):
         return [NoteTool(self), ArchiveTool(self), SyncTool(self)]

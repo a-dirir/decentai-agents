@@ -18,14 +18,11 @@ catalog:
 # rather than two that can disagree. `id` must equal the `agent.id` in the
 # manifest at `path`.
 agents:
-  - id: notebook
-    path: notebook
+  - id: demo_agent
+    path: demo_agent
 
   - id: file_desk
     path: file_desk
 
   - id: web_reader
     path: web_reader
-
-  - id: jira_ops
-    path: jira_ops
